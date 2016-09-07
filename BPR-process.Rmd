@@ -69,3 +69,38 @@ The [following code](https://github.com/phively/gsb-prospect-ranking/blob/master
 ```{r clean.data}
 source("R/clean.data.R")
 ```
+
+# Data exploration and variable selection
+
+The cleaned data frame `dat` is substantial:
+
+```{r data.size}
+dim(dat)
+```
+
+Practically speaking, this is too large to fully explore and experiment with various combinations of variables, transformations, etc. I generally will look at the response variables and a couple key predictors I definitely want to include/exclude (based on domain knowledge) and then use an automatic variable selection routine to reduce the number of predictors.
+
+### Response variable
+
+I had previously decided to treat this as a classification problem. The response variable is `Gift.Donor.Flag..25k`, which is 1 for individuals who have ever made a single $25,000+ gift to Booth and 0 otherwise. Here's the frequency table, as well as a plot of the response against `Booth.ClassYr.or.RecYr`, a proxy for age (which is `NA` for a large proportion of the data).
+
+```{r plot.response}
+# Frequency table
+table(dat$Giving.Status)
+
+# Donor status versus year
+dat %>%
+  # Set up the axes
+  ggplot(aes(x=Booth.ClassYr.or.RecYr)) +
+  # Plot the donor and nondonor groups
+  geom_density(alpha=.5, aes(color=Giving.Status, fill=Giving.Status)) +
+  # Reference lines for the group means
+  geom_vline(xintercept = dat %>% filter(Giving.Status=="Nondonor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
+             linetype="dashed", color="pink", alpha=.75) +
+  geom_vline(xintercept = dat %>% filter(Giving.Status=="Donor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
+             linetype="dashed", color="turquoise", alpha=.75) +
+  # Title and axis labels
+  labs(title="Density plot of donor status by record year with group means", x="Year")
+```
+
+Only about 1% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older than the nondonor group.

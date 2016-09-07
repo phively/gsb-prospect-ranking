@@ -18,7 +18,9 @@ dat <- full.data %>%
          Events.Attended..BUS..Reunion, Events.Attended..BUS..Student, Events.Attended.in.Last.3.FY..BUS.,
          Nonprofit.Leadership.Flag, Non.UChicago.Notable.Vol.Flag, In.Magazine) %>%
   # Create the response variable
-  mutate(Gift.Donor.Flag..25k = ifelse(Gift.Donor.Flag..25k == "Y", 1, 0)) %>%
+  mutate(Giving.Status = ifelse(Gift.Donor.Flag..25k == "Y", 1, 0),
+         Giving.Status = factor(Gift.Donor.Flag..25k, labels=c("Nondonor", "Donor"))) %>%
+  select(-Gift.Donor.Flag..25k) %>%
   # Remove any duplicate records, and any non-alumni records
   filter(Entity.Record.Status.Desc != "Purgable",
          Booth.Program.Group != "") %>%
