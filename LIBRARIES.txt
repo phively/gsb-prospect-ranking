@@ -1,0 +1,6 @@
+dplyr
+lubridate
+ggplot2
+knitr
+devtools
+wranglR

@@ -1,0 +1,63 @@
+---
+title: "Booth Prospect Rankings process"
+author: "Paul Hively"
+date: "September 7, 2016"
+output: html_document
+---
+
+This document describes the process for creating and updating the Booth Prospect Rankings.
+
+# Setup
+
+This demonstration uses data from the `All Booth Entities Modeling FY17` report, saved in the shared WebI folders `Biodata & Analytics\Engagement`.
+
+The following resources are needed to follow along:
+
+  * Installation of [R 3.2.0](https://cran.r-project.org/) or later
+  * Installation of [RStudio](https://www.rstudio.com/products/RStudio/)
+  * The files found in my [gsb-prospect-ranking](https://github.com/phively/gsb-prospect-ranking) GitHub repository -- use the [Clone or download](https://github.com/phively/gsb-prospect-ranking/archive/master.zip) link
+  * This document, opened in RStudio
+  * `ABE Modeling` tab from the `All Booth Entities Modeling FY17` report, saved as a .csv file
+
+### Installing required R packages
+
+My code makes use of several packages:
+
+```{r see.libraries}
+scan("LIBRARIES.txt", what="character")
+```
+
+This code will install and load them as necessary. First, install `devtools` and my `wranglR` package:
+
+```{r get.wranglR}
+# Check to see if devtools is unavailable
+if (!("devtools" %in% utils::installed.packages()[, "Package"])) {
+  # If unavailable, install it
+  install.packages("devtools")
+}
+
+# Check to see if wranglR is unavailable
+if (!("wranglR" %in% utils::installed.packages()[, "Package"])) {
+  # If unavailable, use devtools to install it via GitHub
+  devtools::install_github("phively/wranglR")
+}
+```
+
+Now load wranglR and use it to install or load the other required libraries:
+
+```{r load.libraries, warning=FALSE, message=FALSE}
+# Load wranglR
+library(wranglR)
+
+# Feed the libraries specified in LIBRARIES.txt into wranglR's Libraries() function
+Libraries(scan(file="LIBRARIES.txt", what="character"))
+```
+
+### Importing the data
+
+The following code assumes the `ABE Modeling` tab from `All Booth Entities Modeling FY17.csv` is saved in a `data` subfolder. Since the raw data includes fields like `Name` and `ID` we want to manually create factor levels, rather than have R automatically generate them.
+
+```{r import.data, warning=FALSE}
+# Import the data
+full.data <- read.csv("data/ABE Modeling.csv", stringsAsFactors=FALSE)
+```
