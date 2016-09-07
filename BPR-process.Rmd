@@ -86,18 +86,18 @@ I had previously decided to treat this as a classification problem. The response
 
 ```{r plot.response}
 # Frequency table
-table(dat$Giving.Status)
+table(dat$Gift.Donor.Flag..25k)
 
 # Donor status versus year
 dat %>%
   # Set up the axes
   ggplot(aes(x=Booth.ClassYr.or.RecYr)) +
   # Plot the donor and nondonor groups
-  geom_density(alpha=.5, aes(color=Giving.Status, fill=Giving.Status)) +
+  geom_density(alpha=.5, aes(color=Gift.Donor.Flag..25k, fill=Gift.Donor.Flag..25k)) +
   # Reference lines for the group means
-  geom_vline(xintercept = dat %>% filter(Giving.Status=="Nondonor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
+  geom_vline(xintercept = dat %>% filter(Gift.Donor.Flag..25k=="Nondonor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
              linetype="dashed", color="pink", alpha=.75) +
-  geom_vline(xintercept = dat %>% filter(Giving.Status=="Donor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
+  geom_vline(xintercept = dat %>% filter(Gift.Donor.Flag..25k=="Donor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
              linetype="dashed", color="turquoise", alpha=.75) +
   # Title and axis labels
   labs(title="Density plot of donor status by record year with group means", x="Year")
