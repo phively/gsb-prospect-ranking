@@ -78,7 +78,7 @@ The cleaned data frame `dat` is substantial:
 dim(dat)
 ```
 
-Practically speaking, this is too large to fully explore and experiment with various combinations of variables, transformations, etc. I generally will look at the response variables and a couple key predictors I definitely want to include/exclude (based on domain knowledge) and then use an automatic variable selection routine to reduce the number of predictors.
+Again, this is the cleaned up data file from a trimmed down report: I had 184 variables when first starting out on this project. Practically speaking, this is too large to fully explore and experiment with various combinations of variables, transformations, etc. I generally will look at the response variables and a couple key predictors I definitely want to include/exclude (based on domain knowledge) and then use an automatic variable selection routine to reduce the number of predictors.
 
 ### Response variable
 
@@ -93,14 +93,23 @@ dat %>%
   # Set up the axes
   ggplot(aes(x=Booth.ClassYr.or.RecYr)) +
   # Plot the donor and nondonor groups
-  geom_density(alpha=.5, aes(color=Gift.Donor.Flag..25k, fill=Gift.Donor.Flag..25k)) +
+  geom_density(alpha=.25, aes(color=Gift.Donor.Flag..25k, fill=Gift.Donor.Flag..25k)) +
   # Reference lines for the group means
   geom_vline(xintercept = dat %>% filter(Gift.Donor.Flag..25k=="Nondonor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
-             linetype="dashed", color="pink", alpha=.75) +
+             linetype="dashed", color="pink") +
   geom_vline(xintercept = dat %>% filter(Gift.Donor.Flag..25k=="Donor") %>% select(Booth.ClassYr.or.RecYr) %>% unlist() %>% mean(),
-             linetype="dashed", color="turquoise", alpha=.75) +
+             linetype="dashed", color="turquoise") +
   # Title and axis labels
   labs(title="Density plot of donor status by record year with group means", x="Year")
 ```
 
-Only about 1% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older than the nondonor group.
+Only about 1% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older on average than the nondonor group.
+
+In principle, this process should be repeated for the other key predictors to identify variables that need to be transformed before modeling. Additional visualizations like [partial residual plots](https://en.wikipedia.org/wiki/Partial_residual_plot) can be helpful in regression problems.
+
+### Tree-based variable selection
+
+Methods such as classification and regression trees (CART) and random forests have been proposed as a variable selection method (e.g. [Sauve & Tuleau-Malot, 2014](https://hal-unice.archives-ouvertes.fr/hal-00551375/document); [Genuer, Poggi, & Tuleau-Malot, 2009](https://hal.archives-ouvertes.fr/hal-00755489/file/PRLv4.pdf)) and I find they have several appealing features.
+
+  * Stability
+  * Correlation structure
