@@ -5,7 +5,7 @@ date: "September 7, 2016"
 output: html_document
 ---
 
-This document describes the process for creating and updating the Booth Prospect Rankings.
+This document describes the process for creating and updating the Booth Prospect Rankings. I do not cover model selection or attempt to justify the methods used.
 
 # Setup
 
@@ -43,7 +43,7 @@ if (!("wranglR" %in% utils::installed.packages()[, "Package"])) {
 }
 ```
 
-Now load wranglR and use it to install or load the other required libraries:
+Now load `wranglR` and use it to install or load the other required libraries:
 
 ```{r load.libraries, warning=FALSE, message=FALSE}
 # Load wranglR
@@ -103,7 +103,7 @@ dat %>%
   labs(title="Density plot of donor status by record year with group means", x="Year")
 ```
 
-Only about 1% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older on average than the nondonor group.
+Only about `r {as.integer(dat$Gift.Donor.Flag..25k) %>% mean() - 1} %>% round(3) * 100 %>% I()`% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older on average than the nondonor group.
 
 In principle, this process should be repeated for the other key predictors to identify variables that need to be transformed before modeling. Additional visualizations like [partial residual plots](https://en.wikipedia.org/wiki/Partial_residual_plot) can be helpful in regression problems.
 
@@ -111,5 +111,20 @@ In principle, this process should be repeated for the other key predictors to id
 
 Methods such as classification and regression trees (CART) and random forests have been proposed as a variable selection method (e.g. [Sauve & Tuleau-Malot, 2014](https://hal-unice.archives-ouvertes.fr/hal-00551375/document); [Genuer, Poggi, & Tuleau-Malot, 2009](https://hal.archives-ouvertes.fr/hal-00755489/file/PRLv4.pdf)) and I find they have several appealing features.
 
-  * Stability
-  * Correlation structure
+  * Can easily test tens of thousands (!) of variables
+  * No distribution assumptions
+  * Works with missing data
+  * Handles correlated predictors
+  
+I'm trying out the `Boruta` package, which estimates variable importances across a large number of permuted datasets to distinguish between high and low importance features and noise. Here, I make the calculations based on a random sample of `r (n = 1000)` rows (around `r {n / nrow(dat) * 100} %>% round() %>% I()`% of the data).
+
+**N.B. it is NOT recommended** to use the formula interface, i.e. `response ~ .`, with `randomForest`-based methods as this can cause severe performance degradation!
+
+```{r vsurf, cache=TRUE}
+# Set seed for reproducible results
+set.seed(34367)
+samp <- sample_n(dat, size=n)
+
+# Test the various features
+(vars <- Boruta(y=samp$Gift.Donor.Flag..25k, x=select(samp, -Entity.ID, -Gift.Donor.Flag..25k), seed=63698))
+```

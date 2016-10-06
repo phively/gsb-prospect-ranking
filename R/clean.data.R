@@ -6,7 +6,7 @@ dat <- full.data %>%
          Booth.Program.Group, Entity.Degreed.Alum.Undergrad.Ind, Entity.Ever.FacStaff.Ind,
          Entity.Parent.Ind, Bus.Title.High.Lvl, Employ.Years.At.Current.Company,
          Pref.Addr.State.Cd, Pref.Addr.Country.Desc, Gift.Capacity.Numerical.Amt..CR.,
-         Research.Capacity, Research.Non.Capacity, Booth.Lifetime.Giving, Giving.FYs.of.Giving,
+         Research.Capacity, Research.Non.Capacity, Giving.FYs.of.Giving,
          Giving.FY.in.Last.5, Giving.Booth.Allocations.Supported, Giving.Booth.Gifts.Count,
          Giving.Booth.AF.Gifts, Giving.Ever.Pledged.to.Booth, Gift.Donor.Flag..25k,
          Giving.AF.Scholarship, Giving.Student.Support, Giving.First.Trans.Dt, Giving.First.Trans.Amt,
@@ -31,10 +31,12 @@ dat <- full.data %>%
   # Drop unused factor levels
   droplevels() %>%
   # Convert currency to numeric as needed
-  mutate_at(vars(Gift.Capacity.Numerical.Amt..CR., Booth.Lifetime.Giving, Giving.First.Trans.Amt),
+  mutate_at(vars(Gift.Capacity.Numerical.Amt..CR., Giving.First.Trans.Amt),
             CurrencyToNumeric) %>%
   # Replace NA with 0 where needed
   ReplaceValues() %>%
   # Convert to date as needed
   mutate_at(vars(Giving.First.Trans.Dt),
-            ToDate, method="mdy")
+            ToDate, method="mdy") %>%
+  # But we actually don't need that column, just as an example
+  select(-Giving.First.Trans.Dt)
