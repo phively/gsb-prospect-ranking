@@ -1,6 +1,7 @@
 devtools
 wranglR
 dplyr
+tidyr
 lubridate
 ggplot2
 knitr
