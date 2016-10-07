@@ -9,7 +9,7 @@ dat <- full.data %>%
          Research.Capacity, Research.Non.Capacity, Giving.FYs.of.Giving, Giving.FY.in.Last.5,
          Giving.Booth.Allocations.Supported, Giving.Booth.Gifts.Count, Giving.Booth.AF.Gifts,
          Giving.Ever.Pledged.to.Booth, Gift.Cash.Flag, Gift.Stock.Flag, Gift.Donor.Flag..25k,
-         Giving.AF.Scholarship, Giving.Student.Support, Giving.First.Trans.Dt, Giving.First.Trans.Amt,
+         Giving.AF.Scholarship, Giving.First.Trans.Dt, Giving.First.Trans.Amt,
          Spouse.Married.UC.Booth, Rel.Known.Tos.Count, Action.Visit.Count..BUS.,
          Action.NonVisit.Count..BUS., Committees..BUS., Committee.in.Last.3.FY, Committee.Reunion.Active,
          Vol.Acts..BUS., Vol.Acts.Event.Speaker, Events.Vol.Speaker, Vol.Acts.Was.Club.President,

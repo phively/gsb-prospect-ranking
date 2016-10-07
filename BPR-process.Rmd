@@ -103,24 +103,29 @@ dat %>%
   labs(title="Density plot of donor status by record year with group means", x="Year")
 ```
 
-Only about `r {as.integer(dat$Gift.Donor.Flag..25k) %>% mean() - 1} %>% round(3) * 100 %>% I()`% of the alumni population has given at the $25,000+ level, and the donor group is about 10 years older on average than the nondonor group.
+Only about `r {as.integer(dat$Gift.Donor.Flag..25k) %>% mean() - 1} %>% round(3) * 100 %>% I()`% of the alumni population has given at the $25,000+ level, and the donor group is about `r {dat %>% group_by(Gift.Donor.Flag..25k) %>% summarise(mean(Booth.ClassYr.or.RecYr))}[2] %>% unlist() %>% sort() %>% diff() %>% round(1) %>% I()` years older on average than the nondonor group.
 
 In principle, this process should be repeated for the other key predictors to identify variables that need to be transformed before modeling. Additional visualizations like [partial residual plots](https://en.wikipedia.org/wiki/Partial_residual_plot) can be helpful in regression problems.
 
 ### Tree-based variable selection
 
-Methods such as classification and regression trees (CART) and random forests have been proposed as a variable selection method (e.g. [Sauve & Tuleau-Malot, 2014](https://hal-unice.archives-ouvertes.fr/hal-00551375/document); [Genuer, Poggi, & Tuleau-Malot, 2009](https://hal.archives-ouvertes.fr/hal-00755489/file/PRLv4.pdf)) and I find they have several appealing features.
+Methods such as classification and regression trees (CART) and random forests have been proposed as a variable selection method, e.g. [Sauve & Tuleau-Malot, 2014](https://hal-unice.archives-ouvertes.fr/hal-00551375/document); [Genuer, Poggi, & Tuleau-Malot, 2009](https://hal.archives-ouvertes.fr/hal-00755489/file/PRLv4.pdf), and I find they have several appealing features.
 
   * Can easily test tens of thousands (!) of variables
   * No distribution assumptions
   * Works with missing data
   * Handles correlated predictors
-  
-I'm trying out the `Boruta` package, which estimates variable importances across a large number of permuted datasets to distinguish between high and low importance features and noise. Here, I make the calculations based on a random sample of `r (n = 1000)` rows (around `r {n / nrow(dat) * 100} %>% round() %>% I()`% of the data).
+
+```{r set.n, echo=FALSE}
+# Number of rows to base variable selection on
+n <- 10000
+```
+
+I'm trying out the `Boruta` package, which estimates variable importances across a large number of permuted datasets to distinguish between high and low importance features and noise. Here, I make the calculations based on a random sample of `r as.integer(n)` rows (around `r {n / nrow(dat) * 100} %>% round() %>% I()`% of the data).
 
 **N.B. it is NOT recommended** to use the formula interface, i.e. `response ~ .`, with `randomForest`-based methods as this can cause severe performance degradation!
 
-```{r vsurf, cache=TRUE}
+```{r boruta, cache=TRUE}
 # Set seed for reproducible results
 set.seed(34367)
 samp <- sample_n(dat, size=n)
@@ -128,3 +133,61 @@ samp <- sample_n(dat, size=n)
 # Test the various features
 (vars <- Boruta(y=samp$Gift.Donor.Flag..25k, x=select(samp, -Entity.ID, -Gift.Donor.Flag..25k), seed=63698))
 ```
+
+Here's a visualization of the relative variable importances.
+
+```{r boruta.viz, echo=FALSE, warning=FALSE}
+# Construct initial data frame
+ggdat <- data.frame(Importance=vars$ImpHistory) %>% gather("Variable", "Importance") %>%
+  # Remove Importance. from the front of every variable name
+  mutate(Variable=gsub("Importance.", "", Variable)) %>%
+  # Append decision to the data frame
+  left_join(data.frame(Decision=vars$finalDecision %>% relevel("Confirmed"),
+                       Variable=names(vars$finalDecision)),
+            by="Variable") %>%
+  # Label shadow variables Reference
+  mutate(Decision = factor(Decision, levels = c(levels(Decision), "Reference"))) %>%
+  ReplaceValues(old.val=NA, new.val="Reference")
+
+# Theme for importance plots
+gg.rf.theme <- list(theme(axis.text.x=element_text(angle=90, hjust=1, vjust=.3),
+                          panel.grid.minor=element_line(linetype="dotted")))
+
+# Plot sorted standardized importances
+ggdat %>% ggplot(aes(x=reorder(Variable, Importance), y=Importance, fill=Decision)) + geom_boxplot(alpha=.3) +
+  gg.rf.theme + scale_fill_manual(values = c("green", "yellow", "red", "black")) +
+  labs(title="Variable importances under Boruta algorithm", x="Variable", y="Importance")
+```
+
+The green boxes are confirmed to be important relative to reference "shadow" variables created by randomly permuting the predictors. These are the ones determined to be important:
+
+```{r boruta.imp.yes}
+# Show all rows
+options(tibble.print_max = Inf)
+# Pick out confirmed important variables, and arrange by mean importance
+ggdat %>% filter(Decision == "Confirmed") %>% group_by(Variable) %>% summarise(Importance = mean(Importance)) %>% arrange(desc(Importance)) %>% data.frame()
+```
+
+There were also `r sum(vars$finalDecision == "Tentative") %>% I()` variables classified `Tentative`:
+
+```{r boruta.imp.maybe}
+# Pick out confirmed important variables, and arrange by mean importance
+ggdat %>% filter(Decision == "Tentative") %>% group_by(Variable) %>% summarise(Importance = mean(Importance)) %>% arrange(desc(Importance))
+```
+
+### The art and science of variable deletion
+
+This is the point at which I think long and hard about what *really* should be included in the model. It depends on domain knowledge, results of data exploration, the form of model to be used, the model's goal, etc. In this context, I'm primarily concerned with identifying *new, high-potential* prospects. Practically speaking, this means:
+
+  * Minimizing predictive error, e.g. finding the model $\text{argmin}_m \sum_i \left[ y_i - \widehat{m}_x(x_i) \right]^2$, on in-sample data is the *wrong* metric!
+  * Focus on identifying as many current prospects as possible (minimizing type II error); type I is acceptable as these become new prospects.
+  * Avoid overfitting the training data. Techniques like [cross-validation](https://en.wikipedia.org/wiki/Cross-validation_(statistics)) are highly recommended.
+  * Avoid [endogenous](https://en.wikipedia.org/wiki/Endogeneity_(econometrics)) variables; in this context, that means those that are causally associated with the outcome being measured, e.g. don't use `Lifetime.Giving` as a predictor if the response variable is `Largest.Gift`.
+
+Some examples for this problem.
+
+  1) `Action.NonVisit.Count..BUS.` is count of non-visit contacts with staff, and potentially problematic as it is a measure of cultivation, which is just one or two steps removed from giving.
+  2) `Alloc.Stewardee.Student.Support` should absolutely not be used; stewardees are people who have given a large enough gift to receive a stewardship report!
+  3) `Research.Non.Capacity` may be usable, as research indicates interest in cultivating someone, which is several steps removed from giving.
+  4) `Giving.Ever.Pledged.to.Booth` may be usable. Even though most of the largest gifts are pledges, the vast majority of pledges are recurring annual gifts, a good indicator of donor engagement.
+
