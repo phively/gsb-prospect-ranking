@@ -159,20 +159,17 @@ ggdat %>% ggplot(aes(x=reorder(Variable, Importance), y=Importance, fill=Decisio
   labs(title="Variable importances under Boruta algorithm", x="Variable", y="Importance")
 ```
 
-The green boxes are confirmed to be important relative to reference "shadow" variables created by randomly permuting the predictors. These are the ones determined to be important:
+The green boxes are confirmed to be important relative to reference "shadow" variables created by randomly permuting the predictors. Here they are, along with classification (`r sum(vars$finalDecision == "Confirmed") %>% I()` confirmed, `r sum(vars$finalDecision == "Tentative") %>% I()` tentative, `r sum(vars$finalDecision == "Rejected") %>% I()` rejected). Here are the confirmed variables:
 
 ```{r boruta.imp.yes}
+# Find mean importances by variable
+var.importance <- ggdat %>% group_by(Variable, Decision) %>% summarise(Importance = mean(Importance))
+
 # Show all rows
 options(tibble.print_max = Inf)
-# Pick out confirmed important variables, and arrange by mean importance
-ggdat %>% filter(Decision == "Confirmed") %>% group_by(Variable) %>% summarise(Importance = mean(Importance)) %>% arrange(desc(Importance)) %>% data.frame()
-```
 
-There were also `r sum(vars$finalDecision == "Tentative") %>% I()` variables classified `Tentative`:
-
-```{r boruta.imp.maybe}
 # Pick out confirmed important variables, and arrange by mean importance
-ggdat %>% filter(Decision == "Tentative") %>% group_by(Variable) %>% summarise(Importance = mean(Importance)) %>% arrange(desc(Importance))
+var.importance %>% filter(Decision == "Confirmed") %>% select(Variable, Importance) %>% arrange(desc(Importance))
 ```
 
 ### The art and science of variable deletion
@@ -189,5 +186,97 @@ Some examples for this problem.
   1) `Action.NonVisit.Count..BUS.` is count of non-visit contacts with staff, and potentially problematic as it is a measure of cultivation, which is just one or two steps removed from giving.
   2) `Alloc.Stewardee.Student.Support` should absolutely not be used; stewardees are people who have given a large enough gift to receive a stewardship report!
   3) `Research.Non.Capacity` may be usable, as research indicates interest in cultivating someone, which is several steps removed from giving.
-  4) `Giving.Ever.Pledged.to.Booth` may be usable. Even though most of the largest gifts are pledges, the vast majority of pledges are recurring annual gifts, a good indicator of donor engagement.
+  4) `Action.Visit.Count..BUS.` is count of visit contacts with staff; again, this is a measure of cultivation and therefore problematic.
+  5) `Giving.Ever.Pledged.to.Booth` may be usable. Even though most of the largest gifts are pledges, the vast majority of pledges are recurring annual gifts, a good indicator of donor engagement.
+  6) `Giving.First.Trans.Amt` is the size of the first gift made; obviously problematic for non-donors and people who have only made a single gift, but some kind of indicator could be helpful. However, *beware the effect of inflation* -- a \$100 class gift from a 1960 graduate is worth about \$800 in 2015 dollars!
 
+Taking out all the rejected variables and those that I deem too close to the response, and re-running the algorithm on the full dataset:
+
+```{r boruta2, cache=TRUE}
+# Variables to drop
+rejected.vars <- var.importance %>% filter(Decision == "Rejected") %>% select(Variable) %>% unlist()
+drop.vars <- c("Action.NonVisit.Count..BUS.", "Alloc.Stewardee.Student.Support", "Action.Visit.Count..BUS.", "Giving.AF.Scholarship", "Awards..BUS.", "Gift.Capacity.Numerical.Amt..CR.")
+
+# Test the various features
+(vars2 <- Boruta(y=dat$Gift.Donor.Flag..25k, x=select(dat, -one_of(rejected.vars), -one_of(drop.vars), -Entity.ID, -Gift.Donor.Flag..25k), seed=70639))
+```
+```{r boruta.viz2, echo=FALSE, warning=FALSE}
+# Construct initial data frame
+ggdat <- data.frame(Importance=vars2$ImpHistory) %>% gather("Variable", "Importance") %>%
+  # Remove Importance. from the front of every variable name
+  mutate(Variable=gsub("Importance.", "", Variable)) %>%
+  # Append decision to the data frame
+  left_join(data.frame(Decision=vars2$finalDecision %>% relevel("Confirmed"),
+                       Variable=names(vars2$finalDecision)),
+            by="Variable") %>%
+  # Label shadow variables Reference
+  mutate(Decision = factor(Decision, levels = c(levels(Decision), "Reference"))) %>%
+  ReplaceValues(old.val=NA, new.val="Reference")
+
+# Theme for importance plots
+gg.rf.theme <- list(theme(axis.text.x=element_text(angle=90, hjust=1, vjust=.3),
+                          panel.grid.minor=element_line(linetype="dotted")))
+
+# Plot sorted standardized importances
+ggdat %>% filter(Decision != "Reference") %>% ggplot(aes(x=reorder(Variable, Importance), y=Importance, fill=Decision)) + geom_boxplot(alpha=.3) +
+  gg.rf.theme + scale_fill_manual(values = c("green", "yellow", "red", "black")) +
+  labs(title="Variable importances under Boruta algorithm", x="Variable", y="Importance")
+```
+
+And there you have it -- `r sum(vars2$finalDecision == "Confirmed") %>% I()` of the remaining variables are important. This is a small enough set that they can be further reduced by standard methods as necessary.
+
+# Modeling
+
+Logistic regression is a proven classification method in donor identification problems, e.g. [Lindahl & Winship, 1994](https://www.jstor.org/stable/40196197?seq=1#page_scan_tab_contents); [Birkholz, 2008](http://www.wiley.com/WileyCDA/WileyTitle/productCd-047016557X.html) and the method I chose for this problem.
+
+### Quick exploration
+
+First, create the data frame we'll use for modeling. Note that I've dropped `Booth.Program.Group`, which is an aggregated version of `Booth.Program`.
+
+```{r mdat}
+# Create modeling data frame
+mdat <- dat %>% select(-one_of(rejected.vars), -one_of(drop.vars), -Entity.ID, -Booth.Program.Group)
+
+# Shuffle the data before previewing so that no rows are identifiable
+set.seed(123)
+mdat %>% sample_frac(size=1) %>% str()
+
+# Variable summaries
+summary(mdat)
+```
+
+A few things jump out.
+
+  * Some of the factor levels could be combined, e.g. `Master.Addr.Type = Seasonal` only includes `r mdat %>% filter(Master.Addr.Type == "Seasonal") %>% nrow() %>% I()` people.
+  * Looking at the quartiles, `Research.Non.Capacity`, `Giving.Ever.Pledged.to.Booth`, `Rel.Known.Tos.Count`, `Gift.Stock.Flag` and the various engagement indicators appear to be mostly 0s. They could be transformed or binned into factors.
+  * From comparing the mean and median it's clear all of the various giving indicators are positively skewed, which follows given that they're left-bounded by 0. These should be transformed before use.
+
+Let's look at a few examples.
+
+### Research.Non.Capacity
+
+It's always a good idea to examine the variable's univariate distribution with a technique like a histogram or density estimate.
+
+```{r research.non.cap.plot}
+# Create the first plot; bins is equal to the max so each count gets its own bar (no binning)
+(g <- mdat %>% ggplot(aes(x=Research.Non.Capacity)) + geom_histogram(bins=max(mdat$Research.Non.Capacity)))
+```
+
+It's a bit hard to see what's going on given the y scale, so let's transform it.
+
+```{r research.non.cap.plot2, warning=FALSE}
+# Add a log10 y scale to the plot
+g + scale_y_log10()
+```
+
+The vast majority of individuals do not have any research. One possibility (and what I end up doing) is transforming this variable into an indicator that takes the value 1 if there is any research, e.g. $I(x) = \left\{ \begin{array}{ll} 1,\text{ x > 0} \\ 0,\text{ otherwise} \end{array} \right.$.
+
+### Giving.First.Trans.Amt
+
+Temporarily dropping non-donors:
+
+```{r giving.first.trans.amt.plot, warning=FALSE}
+# Create the first plot
+(g <- mdat %>% filter(Giving.First.Trans.Amt > 0) %>% ggplot(aes(x=Giving.First.Trans.Amt)) + geom_histogram(bins=20) +
+  scale_x_log10(labels=scales::dollar))
+```
