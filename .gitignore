@@ -1,6 +1,5 @@
 # Data files
 /data/
-/data.tmp/
 
 # History files
 .Rhistory
