@@ -7,6 +7,15 @@ output: html_document
 
 This document describes the process for creating and updating the Booth Prospect Rankings. I do not cover model selection or attempt to justify the methods used.
 
+# Quick version
+
+To skip the modeling steps and refresh the scores only, do the following:
+
+  1. [Setup](#setup) through "Preparing the data"
+  2.
+
+<a name="setup"></a>
+
 # Setup
 
 This demonstration uses data from the `All Booth Entities Modeling FY17` report, saved in the shared WebI folders `Biodata & Analytics\Engagement`.
@@ -237,6 +246,9 @@ First, create the data frame we'll use for modeling. Note that I've dropped `Boo
 # Create modeling data frame
 mdat <- dat %>% select(-one_of(rejected.vars), -one_of(drop.vars), -Entity.ID, -Booth.Program.Group)
 
+# Save headers to be used
+write.table(colnames(mdat), file="results/mdat.vars.txt", row.names=FALSE, col.names=FALSE)
+
 # Shuffle the data before previewing so that no rows are identifiable
 set.seed(123)
 mdat %>% sample_frac(size=1) %>% str()
@@ -253,7 +265,7 @@ A few things jump out.
 
 Let's look at a few examples.
 
-### Research.Non.Capacity
+#### Research.Non.Capacity
 
 It's always a good idea to examine the variable's univariate distribution with a technique like a histogram or density estimate.
 
@@ -271,7 +283,7 @@ g + scale_y_log10()
 
 The vast majority of individuals do not have any research. One possibility (and what I end up doing) is transforming this variable into an indicator that takes the value 1 if there is any research, e.g. $I(x) = \left\{ \begin{array}{ll} 1,\text{ x > 0} \\ 0,\text{ otherwise} \end{array} \right.$.
 
-### Giving.First.Trans.Amt
+#### Giving.First.Trans.Amt
 
 Temporarily dropping non-donors:
 
@@ -280,3 +292,30 @@ Temporarily dropping non-donors:
 (g <- mdat %>% filter(Giving.First.Trans.Amt > 0) %>% ggplot(aes(x=Giving.First.Trans.Amt)) + geom_histogram(bins=20) +
   scale_x_log10(labels=scales::dollar))
 ```
+
+This is nearly symmetric on the $log_{10}$ scale, but too correlated with lifetime giving to use directly. One possibility is to discretize it into quantiles.
+
+```{r giving.first.trans.quantiles}
+mdat %>% filter(Giving.First.Trans.Amt > 0) %>% select(Giving.First.Trans.Amt) %>% unlist() %>% quantile()
+```
+
+We know that only `r {as.integer(dat$Gift.Donor.Flag..25k) %>% mean() - 1} %>% round(3) * 100 %>% I()`% of constituents give at the target level, so the quantiles suggest it's reasonable to create a factor for first gift in the ranges $[0,25), ~ [25,50), ~ [50,100), ~ [100, \infty)$, which is what I end up doing.
+
+### Data creation
+
+The [following script](https://github.com/phively/gsb-prospect-ranking/blob/master/R/modeling.transformations.R) loads the data and performs the various transformations to be performed before modeling.
+
+```{r mdat_script}
+source("R/modeling.transformations.R")
+```
+
+Logistic regression is a [generalized linear model](https://en.wikipedia.org/wiki/Generalized_linear_model) based on the binomial distribution, which by default uses a logit link function. Here's the R implementation on all of the data:
+
+```{r glm1}
+glm1 <- mdat %>% glm(Gift.Donor.Flag..25k ~ ., data=., family=binomial())
+summary(glm1) %>% print(digits=3)
+```
+
+The Estimate column gives coefficients for each variable, which can be used with the data to predict the log odds $logit(p) = log \left(\frac{p}{1-p} \right)$ that someone is a $25k+ donor in this case. The other three columns give a sense of how likely it is that the variable is "really" associated with the response, as opposed to being an artifact of this particular sample.
+
+**N.B. dropping variables with high p-values is not a good method for refining a model!** Models should be assessed based on some objective function, which in this case is classification error.
